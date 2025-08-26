@@ -1,0 +1,528 @@
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { flushSync } from 'react-dom';
+import firestoreService from './services/api.js';
+
+// Get config from environment variables
+const MAX_MESSAGES = parseInt(import.meta.env.VITE_MAX_MESSAGES) || 200;
+const MAX_MESSAGE_LENGTH = parseInt(import.meta.env.VITE_MAX_MESSAGE_LENGTH) || 1000;
+const MAX_USERNAME_LENGTH = parseInt(import.meta.env.VITE_MAX_USERNAME_LENGTH) || 30;
+const ENABLE_REALTIME = import.meta.env.VITE_ENABLE_REALTIME === 'true';
+const DEBUG_MODE = import.meta.env.VITE_DEBUG_MODE === 'true';
+
+const USER_KEY = 'chat_user';
+
+// Color palette for user avatars and names
+const USER_COLORS = [
+  { bg: 'bg-gradient-to-br from-red-400 to-red-600', text: 'text-red-600', light: 'bg-red-50' },
+  { bg: 'bg-gradient-to-br from-blue-400 to-blue-600', text: 'text-blue-600', light: 'bg-blue-50' },
+  { bg: 'bg-gradient-to-br from-green-400 to-green-600', text: 'text-green-600', light: 'bg-green-50' },
+  { bg: 'bg-gradient-to-br from-purple-400 to-purple-600', text: 'text-purple-600', light: 'bg-purple-50' },
+  { bg: 'bg-gradient-to-br from-pink-400 to-pink-600', text: 'text-pink-600', light: 'bg-pink-50' },
+  { bg: 'bg-gradient-to-br from-orange-400 to-orange-600', text: 'text-orange-600', light: 'bg-orange-50' },
+  { bg: 'bg-gradient-to-br from-teal-400 to-teal-600', text: 'text-teal-600', light: 'bg-teal-50' },
+  { bg: 'bg-gradient-to-br from-indigo-400 to-indigo-600', text: 'text-indigo-600', light: 'bg-indigo-50' },
+  { bg: 'bg-gradient-to-br from-yellow-400 to-yellow-600', text: 'text-yellow-600', light: 'bg-yellow-50' },
+  { bg: 'bg-gradient-to-br from-cyan-400 to-cyan-600', text: 'text-cyan-600', light: 'bg-cyan-50' }
+];
+
+// Get color for user based on userId
+const getUserColor = (userId) => {
+  const colorIndex = Math.abs(userId.toString().split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % USER_COLORS.length;
+  return USER_COLORS[colorIndex];
+};
+
+// Lưu trữ số thứ tự người dùng ẩn danh
+let anonymousCounter = parseInt(localStorage.getItem('anonymous_counter') || '0');
+
+function getAnonymousName() {
+  anonymousCounter += 1;
+  localStorage.setItem('anonymous_counter', anonymousCounter.toString());
+  return `Ẩn danh ${anonymousCounter}`;
+}
+
+// Load user from localStorage
+function loadUser() {
+  try {
+    const saved = localStorage.getItem(USER_KEY);
+    return saved ? JSON.parse(saved) : { name: getAnonymousName(), id: Date.now() };
+  } catch {
+    return { name: getAnonymousName(), id: Date.now() };
+  }
+}
+
+// Save user to localStorage
+function saveUser(user) {
+  try {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch (error) {
+    console.error('Error saving user:', error);
+  }
+}
+
+const Chat = () => {
+  // Debug: Check render count
+  if (DEBUG_MODE) {
+    console.log('Chat component rendered');
+  }
+
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [user, setUser] = useState(() => loadUser());
+  const [editingName, setEditingName] = useState(false);
+  const [tempName, setTempName] = useState('');
+  const [isOnline, setIsOnline] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false); // Add sending state
+  const [visibleTimestamps, setVisibleTimestamps] = useState(new Set());
+  const inputRef = useRef(null);
+  const messagesEndRef = useRef(null);
+
+  // Auto scroll to bottom when new message added
+  useEffect(() => {
+    if (messages.length > 0) {
+      const timer = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [messages.length]); // Only trigger when message count changes
+
+  // Save user when it changes
+  useEffect(() => {
+    if (user) {
+      saveUser(user);
+    }
+  }, [user.name]); // Only save when name changes
+
+  // Load messages and setup real-time listener
+  useEffect(() => {
+    let unsubscribe = null;
+    
+    const setupMessagesListener = () => {
+      if (ENABLE_REALTIME) {
+        // Setup real-time listener
+        unsubscribe = firestoreService.subscribeToMessages((newMessages) => {
+          setMessages(newMessages);
+          setLoading(false);
+        }, MAX_MESSAGES);
+      } else {
+        // Load messages once
+        const loadMessages = async () => {
+          const result = await firestoreService.getMessages(MAX_MESSAGES);
+          if (result.success) {
+            setMessages(result.data);
+          }
+          setLoading(false);
+        };
+        loadMessages();
+      }
+    };
+
+    setupMessagesListener();
+
+    // Cleanup subscription on unmount
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []); // Empty dependency array to run only once
+
+  // Simulate online status (less frequent updates)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsOnline(Math.random() > 0.1); // 90% online chance
+    }, 10000); // Update every 10 seconds instead of 5
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleSendWithText = async (messageText) => {
+    if (!messageText || sending) return; // Prevent if already sending
+    
+    setSending(true);
+    
+    const newMessage = {
+      userId: user.id,
+      name: user.name,
+      text: messageText,
+      time: new Date().toLocaleTimeString('vi-VN', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      }),
+      isOwn: true
+    };
+
+    // Send to Firestore
+    try {
+      const result = await firestoreService.sendMessage(newMessage);
+      
+      if (result.success) {
+        inputRef.current?.focus();
+        
+        // Clean up old messages if we're at the limit
+        if (messages.length >= MAX_MESSAGES) {
+          await firestoreService.deleteOldMessages(MAX_MESSAGES);
+        }
+      } else {
+        console.error('Failed to send message:', result.error);
+        // Restore input on error
+        setInput(messageText);
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      // Restore input on error
+      setInput(messageText);
+    } finally {
+      setSending(false); // Reset sending state
+    }
+  };
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    if (!input.trim() || sending) return; // Prevent if already sending
+    
+    const messageText = input.trim();
+    
+    // Immediately clear input and set sending state to prevent double submission
+    setInput('');
+    await handleSendWithText(messageText);
+  };
+
+  const handleNameEdit = () => {
+    setTempName(user.name);
+    setEditingName(true);
+  };
+
+  const handleNameChange = (e) => {
+    setTempName(e.target.value);
+  };
+
+  const handleNameSave = () => {
+    if (tempName.trim()) {
+      setUser(prev => ({ ...prev, name: tempName.trim() }));
+    }
+    setEditingName(false);
+  };
+
+  const handleNameCancel = () => {
+    setTempName('');
+    setEditingName(false);
+  };
+
+  const isMessageFromCurrentUser = (msg) => msg.userId === user.id;
+
+  // Check if we should show timestamp (if messages are more than 5 minutes apart)
+  const shouldShowTimestamp = (currentMsg, previousMsg) => {
+    if (!previousMsg) return true;
+    const currentTime = new Date(currentMsg.timestamp || currentMsg.createdAt);
+    const previousTime = new Date(previousMsg.timestamp || previousMsg.createdAt);
+    const diffInMinutes = (currentTime - previousTime) / (1000 * 60);
+    return diffInMinutes > 5;
+  };
+
+  // Check if we should show avatar (if different user or time gap)
+  const shouldShowAvatar = (currentMsg, nextMsg) => {
+    if (!nextMsg) return true;
+    if (currentMsg.userId !== nextMsg.userId) return true;
+    const currentTime = new Date(currentMsg.timestamp || currentMsg.createdAt);
+    const nextTime = new Date(nextMsg.timestamp || nextMsg.createdAt);
+    const diffInMinutes = (nextTime - currentTime) / (1000 * 60);
+    return diffInMinutes > 2;
+  };
+
+  // Toggle timestamp visibility  
+  const toggleTimestamp = (messageId) => {
+    setVisibleTimestamps(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
+  return (
+    <div className="h-screen w-screen bg-white flex flex-col overflow-hidden">
+      {/* Header - Modern style with gradient */}
+      <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white shadow-lg">
+        <div className="px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold">Chat Private</h1>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-300' : 'bg-gray-300'} animate-pulse`}></div>
+                  <span className="text-sm text-white text-opacity-90">
+                    {isOnline ? `${messages.length} tin nhắn` : 'Đang kết nối...'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            {/* User profile section */}
+            <div className="flex items-center space-x-3">
+              {editingName ? (
+                <div className="flex items-center space-x-2">
+                  <input
+                    className="bg-white bg-opacity-20 backdrop-blur-sm border border-white border-opacity-30 rounded-xl px-4 py-2 text-white placeholder-white placeholder-opacity-70 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 w-40"
+                    value={tempName}
+                    onChange={handleNameChange}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleNameSave();
+                      if (e.key === 'Escape') handleNameCancel();
+                    }}
+                    placeholder="Nhập tên mới..."
+                    maxLength={MAX_USERNAME_LENGTH}
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleNameSave}
+                    className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={handleNameCancel}
+                    className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-3">
+                  <div className="text-right">
+                    <div className="font-semibold text-white">{user.name}</div>
+                    <div className="text-xs text-white text-opacity-75">{messages.length}/{MAX_MESSAGES}</div>
+                  </div>
+                  <div className={`w-10 h-10 ${getUserColor(user.id).bg} rounded-full flex items-center justify-center text-white font-bold text-lg`}>
+                    {user.name.charAt(0).toUpperCase()}
+                  </div>
+                  <button
+                    onClick={handleNameEdit}
+                    className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-lg transition-all"
+                  >
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Messages Area - Full screen with colorful design */}
+      <div className="flex-1 overflow-hidden bg-gradient-to-br from-gray-50 to-blue-50">
+        <div className="h-full flex flex-col">
+          <div className="flex-1 overflow-y-auto px-6 py-6">
+            {loading ? (
+              <div className="flex flex-col items-center justify-center h-full">
+                <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6"></div>
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Đang tải tin nhắn...</h3>
+                  <p className="text-gray-500">Vui lòng đợi trong giây lát</p>
+                </div>
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <div className="w-24 h-24 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-full flex items-center justify-center mb-6 shadow-lg">
+                  <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-800 mb-3">Chào mừng đến Chat Private!</h3>
+                <p className="text-gray-600 mb-2">Chưa có tin nhắn nào trong cuộc trò chuyện</p>
+                <p className="text-sm text-gray-500">Hãy gửi tin nhắn đầu tiên để bắt đầu!</p>
+              </div>
+            ) : (
+              <div className="space-y-1 max-w-4xl mx-auto">
+                {messages.map((msg, index) => {
+                  const isOwn = isMessageFromCurrentUser(msg);
+                  const previousMsg = index > 0 ? messages[index - 1] : null;
+                  const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
+                  const showTimestamp = shouldShowTimestamp(msg, previousMsg);
+                  const showAvatar = shouldShowAvatar(msg, nextMsg);
+                  const showClickableTime = visibleTimestamps.has(msg.id);
+                  const userColor = getUserColor(msg.userId);
+                  
+                  return (
+                    <div key={msg.id} className="w-full">
+                      {/* Time separator with gradient */}
+                      {showTimestamp && (
+                        <div className="flex justify-center my-6">
+                          <div className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-sm px-4 py-2 rounded-full shadow-md">
+                            {new Date(msg.timestamp || msg.createdAt).toLocaleDateString('vi-VN', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Message */}
+                      <div className={`flex items-end space-x-3 ${isOwn ? 'flex-row-reverse space-x-reverse' : ''} ${showAvatar ? 'mb-3' : 'mb-1'}`}>
+                        {/* Avatar for others */}
+                        {!isOwn && (
+                          <div className={`flex-shrink-0 transition-opacity duration-300 ${showAvatar ? 'opacity-100' : 'opacity-0'}`}>
+                            <div className={`w-10 h-10 ${userColor.bg} rounded-full flex items-center justify-center text-white font-bold shadow-md`}>
+                              {msg.name.charAt(0).toUpperCase()}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Message content */}
+                        <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-xs sm:max-w-md lg:max-w-lg`}>
+                          {/* Name (only for others and when showing avatar) */}
+                          {!isOwn && showAvatar && (
+                            <span className={`text-sm font-semibold mb-1 ml-1 ${userColor.text}`}>
+                              {msg.name}
+                            </span>
+                          )}
+                          
+                          {/* Message bubble with enhanced design */}
+                          <div
+                            onClick={() => toggleTimestamp(msg.id)}
+                            className={`relative px-5 py-3 rounded-2xl cursor-pointer transition-all duration-200 hover:scale-[1.02] shadow-sm ${
+                              isOwn
+                                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-br-md'
+                                : `bg-white text-gray-800 border-l-4 ${userColor.text.replace('text-', 'border-')} shadow-md rounded-bl-md`
+                            }`}
+                          >
+                            <p className="text-sm leading-relaxed break-words">{msg.text}</p>
+                            
+                            {/* Message status for own messages */}
+                            {isOwn && (
+                              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center">
+                                <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"></path>
+                                </svg>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Clickable timestamp */}
+                          {showClickableTime && (
+                            <div className={`text-xs text-gray-500 mt-2 px-3 py-1 bg-gray-100 rounded-full ${isOwn ? 'mr-2' : 'ml-2'}`}>
+                              {msg.time || new Date(msg.timestamp || msg.createdAt).toLocaleTimeString('vi-VN', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Own message avatar */}
+                        {isOwn && (
+                          <div className={`w-10 h-10 ${getUserColor(user.id).bg} rounded-full flex items-center justify-center text-white font-bold shadow-md`}>
+                            {user.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+
+          {/* Input Area - Modern gradient design */}
+          <div className="bg-white border-t border-gray-200 px-6 py-4 shadow-lg">
+            <div className="max-w-4xl mx-auto">
+              <form onSubmit={handleSend} className="flex items-end space-x-4">
+                <div className="flex-1 relative">
+                  <textarea
+                    ref={inputRef}
+                    className="w-full resize-none bg-gray-50 border-2 border-gray-200 rounded-2xl px-5 py-4 pr-16 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all duration-200 max-h-32 min-h-[56px] text-gray-800 placeholder-gray-500"
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        // Check if already sending to prevent double submission
+                        if (!sending && input.trim()) {
+                          // Clear input immediately when Enter is pressed
+                          const messageText = input.trim();
+                          // Force synchronous update to clear input immediately
+                          flushSync(() => {
+                            setInput('');
+                          });
+                          // Also clear DOM element directly
+                          if (inputRef.current) {
+                            inputRef.current.value = '';
+                          }
+                          // Call handleSend with the message text
+                          handleSendWithText(messageText);
+                        }
+                      }
+                    }}
+                    placeholder="Nhập tin nhắn của bạn..."
+                    rows={1}
+                    maxLength={MAX_MESSAGE_LENGTH}
+                  />
+                  {input.length > MAX_MESSAGE_LENGTH * 0.8 && (
+                    <div className="absolute right-4 bottom-4 text-xs text-gray-400 bg-white px-2 py-1 rounded-lg shadow">
+                      {input.length}/{MAX_MESSAGE_LENGTH}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="submit"
+                  disabled={!input.trim() || sending}
+                  className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg ${
+                    input.trim() && !sending
+                      ? 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white transform scale-100 hover:scale-105' 
+                      : 'bg-gray-200 text-gray-400 transform scale-95'
+                  }`}
+                >
+                  {sending ? (
+                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : (
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                    </svg>
+                  )}
+                </button>
+              </form>
+              
+              {/* Enhanced message limit warning */}
+              {messages.length >= MAX_MESSAGES * 0.9 && (
+                <div className="mt-4 text-center">
+                  <div className="inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r from-orange-400 to-red-500 text-white text-sm font-medium shadow-md">
+                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"></path>
+                    </svg>
+                    {messages.length >= MAX_MESSAGES ? 
+                      'Đã đạt giới hạn tin nhắn! Tin nhắn cũ sẽ tự động xóa.' : 
+                      `Sắp đạt giới hạn: ${messages.length}/${MAX_MESSAGES} tin nhắn`
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default React.memo(Chat);
