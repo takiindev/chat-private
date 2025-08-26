@@ -426,8 +426,8 @@ const Chat = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
                 </svg>
               </div>
-              <div className="min-w-0 flex-1">
-                <h1 className="text-xl font-bold truncate">Chat Private</h1>
+              <div className="">
+                <p className="text-[16px] font-bold">Ban Công Kích</p>
                 <div className="flex items-center space-x-2">
                   <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-300' : 'bg-gray-300'} animate-pulse flex-shrink-0`}></div>
                   <span className="text-sm text-white text-opacity-90 truncate">
