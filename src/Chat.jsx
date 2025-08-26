@@ -666,7 +666,7 @@ const Chat = () => {
                         }
                       }
                     }}
-                    placeholder="Nhập tin nhắn của bạn... (Shift+Enter để xuống dòng)"
+                    placeholder="Nhập tin nhắn của bạn..."
                     rows={1}
                     maxLength={MAX_MESSAGE_LENGTH}
                   />
