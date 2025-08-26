@@ -31,6 +31,11 @@ const getUserColor = (userId) => {
   return USER_COLORS[colorIndex];
 };
 
+// Get avatar image for all users
+const getUserAvatar = () => {
+  return '/avatar.png'; // All users use the same avatar image
+};
+
 // Lưu trữ số thứ tự người dùng ẩn danh
 let anonymousCounter = parseInt(localStorage.getItem('anonymous_counter') || '0');
 
@@ -385,6 +390,16 @@ const Chat = () => {
     return diffInMinutes > 2;
   };
 
+  // Check if we should show user name (only show for first message in a group)
+  const shouldShowUserName = (currentMsg, previousMsg) => {
+    if (!previousMsg) return true; // Always show for first message
+    if (currentMsg.userId !== previousMsg.userId) return true; // Show if different user
+    const currentTime = new Date(currentMsg.timestamp || currentMsg.createdAt);
+    const prevTime = new Date(previousMsg.timestamp || previousMsg.createdAt);
+    const diffInMinutes = (currentTime - prevTime) / (1000 * 60);
+    return diffInMinutes > 2; // Show if time gap > 2 minutes
+  };
+
   // Toggle timestamp visibility  
   const toggleTimestamp = (messageId) => {
     setVisibleTimestamps(prev => {
@@ -404,30 +419,31 @@ const Chat = () => {
       <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white shadow-lg">
         <div className="px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center backdrop-blur-sm">
+            {/* Left section - App info */}
+            <div className="flex items-center space-x-4 flex-1 min-w-0">
+              <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center backdrop-blur-sm flex-shrink-0">
                 <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
                 </svg>
               </div>
-              <div>
-                <h1 className="text-xl font-bold">Chat Private</h1>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-xl font-bold truncate">Chat Private</h1>
                 <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-300' : 'bg-gray-300'} animate-pulse`}></div>
-                  <span className="text-sm text-white text-opacity-90">
+                  <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-300' : 'bg-gray-300'} animate-pulse flex-shrink-0`}></div>
+                  <span className="text-sm text-white text-opacity-90 truncate">
                     {isOnline ? `${messages.length} tin nhắn` : 'Đang kết nối...'}
                   </span>
                 </div>
               </div>
             </div>
             
-            {/* User profile section */}
-            <div className="flex items-center space-x-3">
+            {/* Right section - Controls and User profile */}
+            <div className="flex items-center space-x-2 flex-shrink-0">
               {/* Notification button */}
               {notificationPermission === 'denied' && (
                 <button
                   onClick={requestNotificationPermission}
-                  className="p-2 bg-white bg-opacity-20 hover:bg-white hover:bg-opacity-30 rounded-full transition-all duration-200 backdrop-blur-sm"
+                  className="p-2 bg-white bg-opacity-20 hover:bg-white hover:bg-opacity-30 rounded-full transition-all duration-200 backdrop-blur-sm flex-shrink-0"
                   title="Bật thông báo"
                 >
                   <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -436,10 +452,11 @@ const Chat = () => {
                 </button>
               )}
               
+              {/* User profile section */}
               {editingName ? (
                 <div className="flex items-center space-x-2">
                   <input
-                    className="bg-white bg-opacity-20 backdrop-blur-sm border border-white border-opacity-30 rounded-xl px-4 py-2 text-white placeholder-white placeholder-opacity-70 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 w-40"
+                    className="bg-white bg-opacity-20 backdrop-blur-sm border border-white border-opacity-30 rounded-xl px-3 py-2 text-white placeholder-white placeholder-opacity-70 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 w-32 sm:w-40 text-sm"
                     value={tempName}
                     onChange={handleNameChange}
                     onKeyDown={e => {
@@ -452,7 +469,7 @@ const Chat = () => {
                   />
                   <button
                     onClick={handleNameSave}
-                    className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg transition-colors"
+                    className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg transition-colors flex-shrink-0"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
@@ -460,7 +477,7 @@ const Chat = () => {
                   </button>
                   <button
                     onClick={handleNameCancel}
-                    className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition-colors"
+                    className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition-colors flex-shrink-0"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -468,17 +485,21 @@ const Chat = () => {
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center space-x-3">
-                  <div className="text-right">
-                    <div className="font-semibold text-white">{user.name}</div>
+                <div className="flex items-center space-x-2">
+                  {/* User info - hidden on very small screens */}
+                  <div className="text-right hidden sm:block">
+                    <div className="font-semibold text-white text-sm truncate max-w-24">{user.name}</div>
                     <div className="text-xs text-white text-opacity-75">{messages.length}/{MAX_MESSAGES}</div>
                   </div>
-                  <div className={`w-10 h-10 ${getUserColor(user.id).bg} rounded-full flex items-center justify-center text-white font-bold text-lg`}>
+                  {/* Avatar */}
+                  <div className={`w-[30px] h-[30px] ${getUserColor(user.id).bg} rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
                     {user.name.charAt(0).toUpperCase()}
                   </div>
+                  {/* Edit button */}
                   <button
                     onClick={handleNameEdit}
-                    className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-lg transition-all"
+                    className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-lg transition-all flex-shrink-0"
+                    title="Chỉnh sửa tên"
                   >
                     <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
@@ -515,13 +536,14 @@ const Chat = () => {
                 <p className="text-sm text-gray-500">Hãy gửi tin nhắn đầu tiên để bắt đầu!</p>
               </div>
             ) : (
-              <div className="space-y-1 max-w-4xl mx-auto">
+              <div className="max-w-4xl mx-auto">
                 {messages.map((msg, index) => {
                   const isOwn = isMessageFromCurrentUser(msg);
                   const previousMsg = index > 0 ? messages[index - 1] : null;
                   const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
                   const showTimestamp = shouldShowTimestamp(msg, previousMsg);
                   const showAvatar = shouldShowAvatar(msg, nextMsg);
+                  const showUserName = shouldShowUserName(msg, previousMsg);
                   const showClickableTime = visibleTimestamps.has(msg.id);
                   const userColor = getUserColor(msg.userId);
                   
@@ -543,72 +565,78 @@ const Chat = () => {
                       )}
                       
                       {/* Message */}
-                      <div className={`flex items-end space-x-3 ${isOwn ? 'flex-row-reverse space-x-reverse' : ''} ${showAvatar ? 'mb-3' : 'mb-1'}`}>
-                        {/* Avatar for others */}
-                        {!isOwn && (
-                          <div className={`flex-shrink-0 transition-opacity duration-300 ${showAvatar ? 'opacity-100' : 'opacity-0'}`}>
-                            <div className={`w-10 h-10 ${userColor.bg} rounded-full flex items-center justify-center text-white font-bold shadow-md`}>
-                              {msg.name.charAt(0).toUpperCase()}
+                      <div className="mb-1">
+                        {/* Layout: Avatar left, Name + Message right */}
+                        <div className={`flex items-start gap-2 ${isOwn ? 'flex-row-reverse' : ''}`}>
+                          {/* Avatar - always show for every message */}
+                          <div className={`flex-shrink-0 ${isOwn ? 'pl-2' : 'pr-2'}`}> 
+                            <div className="w-[30px] h-[30px] rounded-full overflow-hidden shadow-md ring-2 ring-gray-200">
+                              <img 
+                                src={getUserAvatar()} 
+                                alt={isOwn ? user.name : msg.name}
+                                className="w-[30px] h-[30px] object-cover object-center"
+                                onError={(e) => {
+                                  // Fallback to text avatar if image fails to load
+                                  e.target.style.display = 'none';
+                                  e.target.nextElementSibling.style.display = 'flex';
+                                }}
+                              />
+                              <div className={`w-[30px] h-[30px] ${isOwn ? getUserColor(user.id).bg : userColor.bg} rounded-full flex items-center justify-center text-white font-bold shadow-md text-sm`} style={{display: 'none'}}>
+                                {isOwn ? user.name.charAt(0).toUpperCase() : msg.name.charAt(0).toUpperCase()}
+                              </div>
                             </div>
                           </div>
-                        )}
-                        
-                        {/* Message content */}
-                        <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-xs sm:max-w-md lg:max-w-lg`}>
-                          {/* Name (only for others and when showing avatar) */}
-                          {!isOwn && showAvatar && (
-                            <span className={`text-sm font-semibold mb-1 ml-1 ${userColor.text}`}>
-                              {msg.name}
-                            </span>
-                          )}
                           
-                          {/* Message bubble with enhanced design */}
-                          <div
-                            onClick={() => toggleTimestamp(msg.id)}
-                            onDoubleClick={() => copyMessageToClipboard(msg.text, msg.id)}
-                            className={`relative px-5 py-3 rounded-2xl cursor-pointer transition-all duration-200 hover:scale-[1.02] shadow-sm select-text ${
-                              isOwn
-                                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-br-md'
-                                : `bg-white text-gray-800 border-l-4 ${userColor.text.replace('text-', 'border-')} shadow-md rounded-bl-md`
-                            }`}
-                            title="Click: Show time | Double click: Copy message"
-                          >
-                            <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">{msg.text}</p>
+                          {/* Right side: Name and Message in column */}
+                          <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-xs sm:max-w-md lg:max-w-lg flex-1`}>
+                            {/* User name - always show for every message */}
+                            <div className={`mb-0.5 ${isOwn ? 'text-right' : 'text-left'}`}> 
+                              <span className={`text-sm font-semibold ${isOwn ? 'text-indigo-600' : getUserColor(msg.userId).text}`}>
+                                {isOwn ? user.name : msg.name}
+                              </span>
+                            </div>
                             
-                            {/* Copy success indicator */}
-                            {copiedMessageId === msg.id && (
-                              <div className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-bounce">
-                                Copied!
-                              </div>
-                            )}
+                            {/* Message bubble */}
+                            <div
+                              onClick={() => toggleTimestamp(msg.id)}
+                              onDoubleClick={() => copyMessageToClipboard(msg.text, msg.id)}
+                              className={`relative rounded-xl cursor-pointer transition-all duration-200 hover:scale-[1.02] shadow-sm select-text px-3 py-1.5 ${
+                                isOwn
+                                  ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-br-md'
+                                  : `bg-gray-800 text-white rounded-bl-md`
+                              }`}
+                              title="Click: Show time | Double click: Copy message"
+                            >
+                              <p className="m-0 text-sm leading-relaxed break-words whitespace-pre-wrap">{msg.text}</p>
+                              
+                              {/* Copy success indicator */}
+                              {copiedMessageId === msg.id && (
+                                <div className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-bounce">
+                                  Copied!
+                                </div>
+                              )}
+                              
+                              {/* Message status for own messages */}
+                              {isOwn && (
+                                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center">
+                                  <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"></path>
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
                             
-                            {/* Message status for own messages */}
-                            {isOwn && (
-                              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center">
-                                <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"></path>
-                                </svg>
+                            {/* Clickable timestamp */}
+                            {showClickableTime && (
+                              <div className={`text-xs text-gray-500 mt-2 px-3 py-1 bg-gray-100 rounded-full ${isOwn ? 'mr-2' : 'ml-2'}`}>
+                                {msg.time || new Date(msg.timestamp || msg.createdAt).toLocaleTimeString('vi-VN', {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
                               </div>
                             )}
                           </div>
-                          
-                          {/* Clickable timestamp */}
-                          {showClickableTime && (
-                            <div className={`text-xs text-gray-500 mt-2 px-3 py-1 bg-gray-100 rounded-full ${isOwn ? 'mr-2' : 'ml-2'}`}>
-                              {msg.time || new Date(msg.timestamp || msg.createdAt).toLocaleTimeString('vi-VN', {
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </div>
-                          )}
                         </div>
-                        
-                        {/* Own message avatar */}
-                        {isOwn && (
-                          <div className={`w-10 h-10 ${getUserColor(user.id).bg} rounded-full flex items-center justify-center text-white font-bold shadow-md`}>
-                            {user.name.charAt(0).toUpperCase()}
-                          </div>
-                        )}
                       </div>
                     </div>
                   );
@@ -621,12 +649,12 @@ const Chat = () => {
           {/* Input Area - Modern gradient design */}
           <div className="bg-white border-t border-gray-200 px-6 py-4 shadow-lg">
             <div className="max-w-4xl mx-auto">
-              <form onSubmit={handleSend} className="flex items-end space-x-4">
-                <div className="flex-1 relative">
+              <form onSubmit={handleSend} className="flex items-center space-x-3">
+                <div className="flex-1 relative flex items-center">
                   <textarea
                     key={textareaKey}
                     ref={inputRef}
-                    className="w-full resize-none bg-gray-50 border-2 border-gray-200 rounded-2xl px-5 py-4 pr-16 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all duration-200 min-h-[56px] max-h-32 text-gray-800 placeholder-gray-500 overflow-hidden"
+                    className="w-full resize-none bg-gray-50 border-2 border-gray-200 rounded-2xl px-4 py-3 pr-12 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all duration-200 min-h-[44px] max-h-32 text-gray-800 placeholder-gray-500 overflow-hidden"
                     value={input}
                     onChange={handleInputChange}
                     onKeyDown={e => {
@@ -651,7 +679,7 @@ const Chat = () => {
                 <button
                   type="submit"
                   disabled={!input.trim() || sending}
-                  className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg ${
+                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg ${
                     input.trim() && !sending
                       ? 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white transform scale-100 hover:scale-105' 
                       : 'bg-gray-200 text-gray-400 transform scale-95'
