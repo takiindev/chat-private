@@ -107,11 +107,36 @@ const Chat = () => {
   useEffect(() => {
     let unsubscribe = null;
     
+    // Hàm xóa tin nhắn quá 2 tiếng
+    const deleteOldMessagesByTime = async (messagesArr) => {
+      const now = Date.now();
+      const TWO_HOURS = 2 * 60 * 60 * 1000;
+      const oldMessages = messagesArr.filter(msg => {
+        const msgTime = new Date(msg.timestamp || msg.createdAt).getTime();
+        return now - msgTime > TWO_HOURS;
+      });
+      if (oldMessages.length > 0) {
+        for (const msg of oldMessages) {
+          try {
+            await firestoreService.deleteMessage(msg.id);
+          } catch (err) {
+            console.error('Lỗi xóa tin nhắn quá hạn:', err);
+          }
+        }
+      }
+    };
+
     const setupMessagesListener = () => {
       if (ENABLE_REALTIME) {
         // Setup real-time listener
-        unsubscribe = firestoreService.subscribeToMessages((newMessages) => {
-          setMessages(newMessages);
+        unsubscribe = firestoreService.subscribeToMessages(async (newMessages) => {
+          await deleteOldMessagesByTime(newMessages);
+          // Sau khi xóa, chỉ giữ lại tin nhắn hợp lệ
+          const validMessages = newMessages.filter(msg => {
+            const msgTime = new Date(msg.timestamp || msg.createdAt).getTime();
+            return Date.now() - msgTime <= 2 * 60 * 60 * 1000;
+          });
+          setMessages(validMessages);
           setLoading(false);
         }, MAX_MESSAGES);
       } else {
@@ -119,7 +144,12 @@ const Chat = () => {
         const loadMessages = async () => {
           const result = await firestoreService.getMessages(MAX_MESSAGES);
           if (result.success) {
-            setMessages(result.data);
+            await deleteOldMessagesByTime(result.data);
+            const validMessages = result.data.filter(msg => {
+              const msgTime = new Date(msg.timestamp || msg.createdAt).getTime();
+              return Date.now() - msgTime <= 2 * 60 * 60 * 1000;
+            });
+            setMessages(validMessages);
           }
           setLoading(false);
         };
