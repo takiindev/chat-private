@@ -547,6 +547,20 @@ const Chat = () => {
                   const showClickableTime = visibleTimestamps.has(msg.id);
                   const userColor = getUserColor(msg.userId);
                   
+                  // Nếu là tin nhắn thông báo (system/announcement/broadcast)
+                  if (msg.type === 'system' || msg.type === 'announcement' || msg.type === 'broadcast' || msg.type === 'notify') {
+                    return (
+                      <div key={msg.id} className="w-full">
+                        <div className="flex justify-center my-4">
+                          <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-sm px-4 py-2 rounded-full shadow-md">
+                            <span className="font-semibold">{msg.name ? msg.name + ': ' : ''}</span>
+                            <span>{msg.text}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  // ...existing code...
                   return (
                     <div key={msg.id} className="w-full">
                       {/* Time separator with gradient */}
