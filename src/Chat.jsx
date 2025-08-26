@@ -74,6 +74,7 @@ const Chat = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false); // Add sending state
   const [visibleTimestamps, setVisibleTimestamps] = useState(new Set());
+  const [copiedMessageId, setCopiedMessageId] = useState(null); // For copy feedback
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
@@ -209,7 +210,40 @@ const Chat = () => {
     setEditingName(false);
   };
 
-  const isMessageFromCurrentUser = (msg) => msg.userId === user.id;
+  // Auto resize textarea based on content
+  const handleInputChange = (e) => {
+    const value = e.target.value;
+    setInput(value);
+    
+    // Auto resize textarea
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px';
+    }
+  };
+
+  // Copy message to clipboard
+  const copyMessageToClipboard = async (messageText, messageId) => {
+    try {
+      await navigator.clipboard.writeText(messageText);
+      // Show visual feedback
+      setCopiedMessageId(messageId);
+      setTimeout(() => setCopiedMessageId(null), 2000); // Hide after 2 seconds
+      console.log('Message copied to clipboard');
+    } catch (err) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = messageText;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      // Show visual feedback
+      setCopiedMessageId(messageId);
+      setTimeout(() => setCopiedMessageId(null), 2000);
+      console.log('Message copied to clipboard (fallback)');
+    }
+  };
 
   // Check if we should show timestamp (if messages are more than 5 minutes apart)
   const shouldShowTimestamp = (currentMsg, previousMsg) => {
@@ -397,13 +431,22 @@ const Chat = () => {
                           {/* Message bubble with enhanced design */}
                           <div
                             onClick={() => toggleTimestamp(msg.id)}
-                            className={`relative px-5 py-3 rounded-2xl cursor-pointer transition-all duration-200 hover:scale-[1.02] shadow-sm ${
+                            onDoubleClick={() => copyMessageToClipboard(msg.text, msg.id)}
+                            className={`relative px-5 py-3 rounded-2xl cursor-pointer transition-all duration-200 hover:scale-[1.02] shadow-sm select-text ${
                               isOwn
                                 ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-br-md'
                                 : `bg-white text-gray-800 border-l-4 ${userColor.text.replace('text-', 'border-')} shadow-md rounded-bl-md`
                             }`}
+                            title="Click: Show time | Double click: Copy message"
                           >
-                            <p className="text-sm leading-relaxed break-words">{msg.text}</p>
+                            <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">{msg.text}</p>
+                            
+                            {/* Copy success indicator */}
+                            {copiedMessageId === msg.id && (
+                              <div className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-bounce">
+                                Copied!
+                              </div>
+                            )}
                             
                             {/* Message status for own messages */}
                             {isOwn && (
@@ -448,9 +491,9 @@ const Chat = () => {
                 <div className="flex-1 relative">
                   <textarea
                     ref={inputRef}
-                    className="w-full resize-none bg-gray-50 border-2 border-gray-200 rounded-2xl px-5 py-4 pr-16 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all duration-200 max-h-32 min-h-[56px] text-gray-800 placeholder-gray-500"
+                    className="w-full resize-none bg-gray-50 border-2 border-gray-200 rounded-2xl px-5 py-4 pr-16 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all duration-200 min-h-[56px] max-h-32 text-gray-800 placeholder-gray-500 overflow-hidden"
                     value={input}
-                    onChange={e => setInput(e.target.value)}
+                    onChange={handleInputChange}
                     onKeyDown={e => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -471,7 +514,7 @@ const Chat = () => {
                         }
                       }
                     }}
-                    placeholder="Nhập tin nhắn của bạn..."
+                    placeholder="Nhập tin nhắn của bạn... (Shift+Enter để xuống dòng)"
                     rows={1}
                     maxLength={MAX_MESSAGE_LENGTH}
                   />
