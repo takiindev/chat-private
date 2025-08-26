@@ -456,7 +456,7 @@ const Chat = () => {
               {editingName ? (
                 <div className="flex items-center space-x-2">
                   <input
-                    className="bg-white bg-opacity-20 backdrop-blur-sm border border-white border-opacity-30 rounded-xl px-3 py-2 text-white placeholder-white placeholder-opacity-70 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 w-32 sm:w-40 text-sm"
+                    className="bg-white bg-opacity-80 border border-white border-opacity-30 rounded-xl px-3 py-2 text-black placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 w-32 sm:w-40 text-sm"
                     value={tempName}
                     onChange={handleNameChange}
                     onKeyDown={e => {
@@ -676,14 +676,16 @@ const Chat = () => {
                     </div>
                   )}
                 </div>
-                <button
-                  type="submit"
-                  disabled={!input.trim() || sending}
-                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg ${
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={!input.trim() || sending ? undefined : handleSend}
+                  className={`rounded-full flex items-center justify-center transition-all duration-200 shadow-lg cursor-pointer px-3 py-3 ${
                     input.trim() && !sending
-                      ? 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white transform scale-100 hover:scale-105' 
-                      : 'bg-gray-200 text-gray-400 transform scale-95'
+                      ? 'bg-black text-white hover:bg-gray-900 transform scale-100 hover:scale-105' 
+                      : 'bg-black text-gray-400 cursor-not-allowed transform scale-95'
                   }`}
+                  style={{ outline: 'none' }}
                 >
                   {sending ? (
                     <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -691,11 +693,12 @@ const Chat = () => {
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                   ) : (
-                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                    <svg className="w-6 h-6" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M22 2L11 13" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M22 2L15 22L11 13L2 9L22 2Z" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   )}
-                </button>
+                </div>
               </form>
               
               {/* Pending message indicator */}
