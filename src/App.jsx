@@ -57,21 +57,13 @@ function Home() {
           to="/chat"
           className="inline-flex items-center bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg"
         >
-          <span>Vào Chat</span>
-          <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <span className="text-white">Vào Chat</span>
+          <svg className="ml-2 w-5 h-5" fill="none" stroke="white" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
           </svg>
         </Link>
 
-        {/* Footer */}
-        <div className="mt-12 flex justify-center space-x-4">
-          <a href="https://vite.dev" target="_blank" className="opacity-60 hover:opacity-100 transition-opacity">
-            <img src={viteLogo} alt="Vite logo" className="h-8 w-8" />
-          </a>
-          <a href="https://react.dev" target="_blank" className="opacity-60 hover:opacity-100 transition-opacity">
-            <img src={reactLogo} alt="React logo" className="h-8 w-8" />
-          </a>
-        </div>
+  {/* Footer đã xoá logo Vite và React */}
       </div>
     </div>
   );
