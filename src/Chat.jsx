@@ -414,7 +414,7 @@ const Chat = () => {
   };
 
   return (
-    <div className="h-screen w-screen bg-white flex flex-col overflow-hidden">
+    <div className="h-[100dvh] w-screen bg-white flex flex-col overflow-hidden">
       {/* Header - Modern style with gradient */}
       <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white shadow-lg">
         <div className="px-4 py-4">
