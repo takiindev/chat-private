@@ -245,6 +245,9 @@ const Chat = () => {
     }
   };
 
+  // Check if message is from current user
+  const isMessageFromCurrentUser = (msg) => msg.userId === user.id;
+
   // Check if we should show timestamp (if messages are more than 5 minutes apart)
   const shouldShowTimestamp = (currentMsg, previousMsg) => {
     if (!previousMsg) return true;
