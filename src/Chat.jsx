@@ -75,6 +75,9 @@ const Chat = () => {
   const [sending, setSending] = useState(false); // Add sending state
   const [visibleTimestamps, setVisibleTimestamps] = useState(new Set());
   const [copiedMessageId, setCopiedMessageId] = useState(null); // For copy feedback
+  const [pendingMessage, setPendingMessage] = useState(null); // Store message while sending
+  const [textareaKey, setTextareaKey] = useState(0); // Force textarea re-render
+  const [notificationPermission, setNotificationPermission] = useState(Notification.permission); // Track notification permission
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
@@ -137,6 +140,78 @@ const Chat = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Ensure input DOM and state are synchronized
+  useEffect(() => {
+    if (inputRef.current) {
+      // Force sync DOM with React state
+      if (inputRef.current.value !== input) {
+        inputRef.current.value = input;
+        inputRef.current.textContent = input;
+        inputRef.current.innerHTML = input;
+      }
+    }
+  }, [input]);
+
+  // Request notification permission and handle notifications
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window) {
+      if (Notification.permission === 'default') {
+        const permission = await Notification.requestPermission();
+        setNotificationPermission(permission);
+        return permission;
+      }
+      return Notification.permission;
+    }
+    return 'denied';
+  };
+
+  // Show notification for new message
+  const showNotification = (message) => {
+    if (notificationPermission === 'granted' && 'Notification' in window) {
+      // Don't show notification for own messages
+      if (message.userId === user.id) return;
+      
+      // Don't show if page is visible
+      if (!document.hidden) return;
+      
+      const notification = new Notification(`${message.name}`, {
+        body: message.text.length > 50 ? message.text.substring(0, 50) + '...' : message.text,
+        icon: '/vite.svg', // You can change this to your app icon
+        badge: '/vite.svg',
+        tag: 'chat-message', // Replace previous notifications
+        silent: false,
+        requireInteraction: false
+      });
+
+      // Auto close after 5 seconds
+      setTimeout(() => {
+        notification.close();
+      }, 5000);
+
+      // Click to focus window
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+    }
+  };
+
+  // Request permission on component mount
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
+
+  // Watch for new messages and show notifications
+  useEffect(() => {
+    if (messages.length > 0) {
+      const latestMessage = messages[messages.length - 1];
+      // Only show notification for messages from others
+      if (latestMessage.userId !== user.id) {
+        showNotification(latestMessage);
+      }
+    }
+  }, [messages, user.id, notificationPermission]);
+
   const handleSendWithText = async (messageText) => {
     if (!messageText || sending) return; // Prevent if already sending
     
@@ -166,13 +241,23 @@ const Chat = () => {
         }
       } else {
         console.error('Failed to send message:', result.error);
-        // Restore input on error
-        setInput(messageText);
+        // Restore input on error from pending message
+        if (pendingMessage) {
+          setInput(pendingMessage);
+          if (inputRef.current) {
+            inputRef.current.value = pendingMessage;
+          }
+        }
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      // Restore input on error
-      setInput(messageText);
+      // Restore input on error from pending message
+      if (pendingMessage) {
+        setInput(pendingMessage);
+        if (inputRef.current) {
+          inputRef.current.value = pendingMessage;
+        }
+      }
     } finally {
       setSending(false); // Reset sending state
     }
@@ -184,9 +269,42 @@ const Chat = () => {
     
     const messageText = input.trim();
     
-    // Immediately clear input and set sending state to prevent double submission
+    // Step 1: Store message in pending state
+    setPendingMessage(messageText);
+    
+    // Step 2: IMMEDIATELY clear input - multiple approaches to ensure it works
     setInput('');
+    if (inputRef.current) {
+      // Force clear all possible content
+      inputRef.current.value = '';
+      inputRef.current.innerHTML = '';
+      inputRef.current.textContent = '';
+      inputRef.current.innerText = '';
+      // Reset all styles
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = '56px';
+      // Force blur and focus to reset
+      inputRef.current.blur();
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, 0);
+    }
+    
+    // Step 3: Force React to update immediately
+    flushSync(() => {
+      setInput('');
+    });
+    
+    // Step 4: Force textarea re-render if needed
+    setTextareaKey(prev => prev + 1);
+    
+    // Step 4: Now send the message from pending state
     await handleSendWithText(messageText);
+    
+    // Step 5: Clear pending message after sending
+    setPendingMessage(null);
   };
 
   const handleNameEdit = () => {
@@ -305,6 +423,19 @@ const Chat = () => {
             
             {/* User profile section */}
             <div className="flex items-center space-x-3">
+              {/* Notification button */}
+              {notificationPermission === 'denied' && (
+                <button
+                  onClick={requestNotificationPermission}
+                  className="p-2 bg-white bg-opacity-20 hover:bg-white hover:bg-opacity-30 rounded-full transition-all duration-200 backdrop-blur-sm"
+                  title="Bật thông báo"
+                >
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-5 5v-5zM10.5 8.5a2.5 2.5 0 105 0 2.5 2.5 0 00-5 0zM17 8.5a7.5 7.5 0 01-15 0 7.5 7.5 0 0115 0z"></path>
+                  </svg>
+                </button>
+              )}
+              
               {editingName ? (
                 <div className="flex items-center space-x-2">
                   <input
@@ -493,6 +624,7 @@ const Chat = () => {
               <form onSubmit={handleSend} className="flex items-end space-x-4">
                 <div className="flex-1 relative">
                   <textarea
+                    key={textareaKey}
                     ref={inputRef}
                     className="w-full resize-none bg-gray-50 border-2 border-gray-200 rounded-2xl px-5 py-4 pr-16 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all duration-200 min-h-[56px] max-h-32 text-gray-800 placeholder-gray-500 overflow-hidden"
                     value={input}
@@ -500,20 +632,9 @@ const Chat = () => {
                     onKeyDown={e => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
-                        // Check if already sending to prevent double submission
+                        // Just call handleSend directly, let it handle the clearing
                         if (!sending && input.trim()) {
-                          // Clear input immediately when Enter is pressed
-                          const messageText = input.trim();
-                          // Force synchronous update to clear input immediately
-                          flushSync(() => {
-                            setInput('');
-                          });
-                          // Also clear DOM element directly
-                          if (inputRef.current) {
-                            inputRef.current.value = '';
-                          }
-                          // Call handleSend with the message text
-                          handleSendWithText(messageText);
+                          handleSend(e);
                         }
                       }
                     }}
@@ -548,6 +669,19 @@ const Chat = () => {
                   )}
                 </button>
               </form>
+              
+              {/* Pending message indicator */}
+              {pendingMessage && sending && (
+                <div className="mt-2 text-center">
+                  <div className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
+                    <svg className="w-3 h-3 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Đang gửi: "{pendingMessage.length > 30 ? pendingMessage.substring(0, 30) + '...' : pendingMessage}"
+                  </div>
+                </div>
+              )}
               
               {/* Enhanced message limit warning */}
               {messages.length >= MAX_MESSAGES * 0.9 && (
