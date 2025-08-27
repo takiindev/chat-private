@@ -205,24 +205,21 @@ const Chat = () => {
     if (notificationPermission === 'granted' && 'Notification' in window) {
       // Don't show notification for own messages
       if (message.userId === user.id) return;
-      
       // Don't show if page is visible
       if (!document.hidden) return;
-      
-      const notification = new Notification(`${message.name}`, {
-        body: message.text.length > 50 ? message.text.substring(0, 50) + '...' : message.text,
+      // Nội dung thông báo: [Name]: [tin nhắn]
+      const notifyText = `${message.name || 'Hệ thống'}: ${message.text.length > 50 ? message.text.substring(0, 50) + '...' : message.text}`;
+      const notification = new Notification(notifyText, {
         icon: '/vite.svg', // You can change this to your app icon
         badge: '/vite.svg',
         tag: 'chat-message', // Replace previous notifications
         silent: false,
         requireInteraction: false
       });
-
       // Auto close after 5 seconds
       setTimeout(() => {
         notification.close();
       }, 5000);
-
       // Click to focus window
       notification.onclick = () => {
         window.focus();
