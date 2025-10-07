@@ -4,7 +4,7 @@ import firestoreService from './services/api.js';
 
 // Get config from environment variables
 const MAX_MESSAGES = parseInt(import.meta.env.VITE_MAX_MESSAGES) || 200;
-const MAX_MESSAGE_LENGTH = parseInt(import.meta.env.VITE_MAX_MESSAGE_LENGTH) || 1000;
+const MAX_MESSAGE_LENGTH = parseInt(import.meta.env.VITE_MAX_MESSAGE_LENGTH) || 100000;
 const MAX_USERNAME_LENGTH = parseInt(import.meta.env.VITE_MAX_USERNAME_LENGTH) || 30;
 const ENABLE_REALTIME = import.meta.env.VITE_ENABLE_REALTIME === 'true';
 const DEBUG_MODE = import.meta.env.VITE_DEBUG_MODE === 'true';
